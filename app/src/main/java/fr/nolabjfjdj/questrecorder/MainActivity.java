@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
                 "Première version\n\n" +
                 "Enregistrement vidéo 1280×720 à 30 FPS.\n" +
                 "Android affichera le choix de contenu à capturer.\n\n" +
-                "Après le démarrage, utilise le bouton Arrêter dans la notification."
+                "Tu peux arrêter l'enregistrement ici ou depuis la notification."
         );
         info.setTextSize(16);
         info.setPadding(0, 24, 0, 32);
@@ -37,9 +37,14 @@ public class MainActivity extends Activity {
         record.setText("Démarrer l'enregistrement");
         record.setOnClickListener(v -> requestRecording());
 
+        Button stop = new Button(this);
+        stop.setText("Arrêter l'enregistrement");
+        stop.setOnClickListener(v -> stopRecording());
+
         layout.addView(title);
         layout.addView(info);
         layout.addView(record);
+        layout.addView(stop);
 
         setContentView(layout);
     }
@@ -52,6 +57,12 @@ public class MainActivity extends Activity {
                 manager.createScreenCaptureIntent(),
                 REQUEST_CAPTURE
         );
+    }
+
+    private void stopRecording() {
+        Intent service = new Intent(this, RecordingService.class);
+        service.setAction(RecordingService.ACTION_STOP);
+        startService(service);
     }
 
     @Override
