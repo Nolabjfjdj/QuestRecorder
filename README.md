@@ -6,24 +6,25 @@ The goal is to record a single Android application, such as PojavLauncher, inste
 
 ## Current version
 
-The first functional version records:
+**0.2.0**
 
-- H.264 video
-- MP4 output
-- 1280×720
-- 30 FPS
-- 10 Mbps video bitrate
-- Android MediaProjection capture
-- foreground recording service
-- notification button to stop recording
+QuestRecorder can currently:
 
-The output is stored in the application's external Movies directory under:
+- record a single Android application through MediaProjection
+- capture H.264 video into MP4
+- record at 600p, 720p or 1080p
+- choose landscape or portrait orientation
+- choose 30 or 60 FPS
+- choose economic, standard or high video quality
+- capture supported internal game/media audio with Android AudioPlaybackCapture
+- capture microphone audio
+- combine internal audio and microphone audio into the MP4 recording
+- save recordings to `Movies/QuestRecorder`
+- stop recording from the app or its foreground notification
 
-QuestRecorder/
+Internal audio capture depends on Android and on the application being recorded allowing playback capture.
 
-## Audio
-
-Game audio capture will be added separately with Android AudioPlaybackCapture. Android requires the target application to allow playback capture, so audio support depends on both Android and the application being recorded.
+The recorder is designed for Meta Quest 2, Quest 3 and Quest 3S, including use with applications such as PojavLauncher.
 
 ## Build
 
