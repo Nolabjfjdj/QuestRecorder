@@ -5,18 +5,20 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.media.MediaRecorder;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
+import android.net.Uri;
 import android.os.Build;
-import android.os.IBinder;
 import android.os.Environment;
-import android.provider.Settings;
+import android.os.IBinder;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 
-import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -28,13 +30,14 @@ public class RecordingService extends Service {
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private MediaRecorder recorder;
-    private File outputFile;
+    private ParcelFileDescriptor outputDescriptor;
+    private Uri outputUri;
     private boolean recording;
 
-    private static final int WIDTH = 1280;
-    private static final int HEIGHT = 720;
-    private static final int FPS = 30;
-    private static final int BITRATE = 10_000_000;
+    private int width = 1280;
+    private int height = 720;
+    private int fps = 30;
+    private int bitrate = 10_000_000;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -56,6 +59,13 @@ public class RecordingService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+
+        configure(
+                intent.getIntExtra("resolution", 1),
+                intent.getIntExtra("orientation", 0),
+                intent.getIntExtra("fps", 0),
+                intent.getIntExtra("quality", 1)
+        );
 
         startForeground(1, buildNotification());
 
@@ -86,6 +96,35 @@ public class RecordingService extends Service {
         return START_NOT_STICKY;
     }
 
+    private void configure(int resolution, int orientation, int fpsChoice, int quality) {
+        if (resolution == 0) {
+            width = 600;
+            height = 1024;
+        } else if (resolution == 1) {
+            width = 1280;
+            height = 720;
+        } else {
+            width = 1920;
+            height = 1080;
+        }
+
+        if (orientation == 0) {
+            int temp = width;
+            width = height;
+            height = temp;
+        }
+
+        fps = fpsChoice == 1 ? 60 : 30;
+
+        if (quality == 0) {
+            bitrate = fps == 60 ? 8_000_000 : 5_000_000;
+        } else if (quality == 2) {
+            bitrate = fps == 60 ? 18_000_000 : 14_000_000;
+        } else {
+            bitrate = fps == 60 ? 12_000_000 : 10_000_000;
+        }
+    }
+
     private Intent getProjectionIntent(Intent intent) {
         if (Build.VERSION.SDK_INT >= 33) {
             return intent.getParcelableExtra("data", Intent.class);
@@ -94,37 +133,52 @@ public class RecordingService extends Service {
     }
 
     private void startRecording() throws Exception {
-        File movies = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-        if (movies == null) {
-            throw new IllegalStateException("Storage unavailable");
-        }
-
-        File folder = new File(movies, "QuestRecorder");
-        if (!folder.exists() && !folder.mkdirs()) {
-            throw new IllegalStateException("Cannot create output folder");
-        }
-
         String timestamp = new SimpleDateFormat(
                 "yyyy-MM-dd_HH-mm-ss", Locale.US).format(new Date());
 
-        outputFile = new File(folder, "QuestRecorder_" + timestamp + ".mp4");
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Video.Media.DISPLAY_NAME,
+                "QuestRecorder_" + timestamp + ".mp4");
+        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+        values.put(
+                MediaStore.Video.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_MOVIES + "/QuestRecorder"
+        );
+        values.put(MediaStore.Video.Media.IS_PENDING, 1);
+
+        outputUri = getContentResolver().insert(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                values
+        );
+
+        if (outputUri == null) {
+            throw new IllegalStateException("Impossible de créer le fichier vidéo");
+        }
+
+        outputDescriptor = getContentResolver().openFileDescriptor(outputUri, "w");
+        if (outputDescriptor == null) {
+            throw new IllegalStateException("Impossible d'ouvrir le fichier vidéo");
+        }
 
         recorder = new MediaRecorder();
         recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+        recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-        recorder.setVideoSize(WIDTH, HEIGHT);
-        recorder.setVideoFrameRate(FPS);
-        recorder.setVideoEncodingBitRate(BITRATE);
-        recorder.setOutputFile(outputFile.getAbsolutePath());
+        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        recorder.setVideoSize(width, height);
+        recorder.setVideoFrameRate(fps);
+        recorder.setVideoEncodingBitRate(bitrate);
+        recorder.setAudioEncodingBitRate(128_000);
+        recorder.setOutputFile(outputDescriptor.getFileDescriptor());
         recorder.prepare();
 
         int density = getResources().getDisplayMetrics().densityDpi;
 
         virtualDisplay = projection.createVirtualDisplay(
                 "QuestRecorder",
-                WIDTH,
-                HEIGHT,
+                width,
+                height,
                 density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 recorder.getSurface(),
@@ -149,10 +203,16 @@ public class RecordingService extends Service {
 
         return new Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("QuestRecorder")
-                .setContentText("Enregistrement vidéo 1280×720")
+                .setContentText(
+                        "Enregistrement " + width + "×" + height + " à " + fps + " FPS"
+                )
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setOngoing(true)
-                .addAction(android.R.drawable.ic_media_pause, "Arrêter", stopPendingIntent)
+                .addAction(
+                        android.R.drawable.ic_media_pause,
+                        "Arrêter",
+                        stopPendingIntent
+                )
                 .build();
     }
 
@@ -169,12 +229,22 @@ public class RecordingService extends Service {
                 recorder.stop();
             } catch (RuntimeException ignored) {
             }
+
             try {
                 recorder.reset();
             } catch (Exception ignored) {
             }
+
             recorder.release();
             recorder = null;
+        }
+
+        if (outputDescriptor != null) {
+            try {
+                outputDescriptor.close();
+            } catch (Exception ignored) {
+            }
+            outputDescriptor = null;
         }
 
         if (virtualDisplay != null) {
@@ -185,6 +255,13 @@ public class RecordingService extends Service {
         if (projection != null) {
             projection.stop();
             projection = null;
+        }
+
+        if (outputUri != null) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.IS_PENDING, 0);
+            getContentResolver().update(outputUri, values, null, null);
+            outputUri = null;
         }
 
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -208,6 +285,7 @@ public class RecordingService extends Service {
                 "Enregistrement",
                 NotificationManager.IMPORTANCE_LOW
         );
-        getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        getSystemService(NotificationManager.class)
+                .createNotificationChannel(channel);
     }
 }
