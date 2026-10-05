@@ -4,20 +4,26 @@ QuestRecorder is an Android recorder designed for Meta Quest 2, Quest 3 and Ques
 
 The goal is to record a single Android application, such as PojavLauncher, instead of recording the whole headset view.
 
-## Goals
+## Current version
 
-- Single-app capture through Android MediaProjection
-- 16:9 recording output
-- Game audio capture when Android and the target application allow playback capture
-- Optional microphone capture
-- No headset movement in the recorded image
-- APK builds through GitHub Actions
+The first functional version records:
 
-## Current status
+- H.264 video
+- MP4 output
+- 1280×720
+- 30 FPS
+- 10 Mbps video bitrate
+- Android MediaProjection capture
+- foreground recording service
+- notification button to stop recording
 
-The repository contains the Android foundation and the MediaProjection permission flow.
+The output is stored in the application's external Movies directory under:
 
-The actual video encoder, audio capture and MP4 muxing are the next implementation step.
+QuestRecorder/
+
+## Audio
+
+Game audio capture will be added separately with Android AudioPlaybackCapture. Android requires the target application to allow playback capture, so audio support depends on both Android and the application being recorded.
 
 ## Build
 
