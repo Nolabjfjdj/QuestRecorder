@@ -270,7 +270,7 @@ public class RecordingService extends Service {
                 eosSent = true;
             }
 
-            int index = videoEncoder.dequeueOutputBuffer(info, 10000);
+            int index = videoEncoder.dequeueOutputBuffer(info, 1000);
             if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                 synchronized (muxerLock) {
                     videoTrack = muxer.addTrack(videoEncoder.getOutputFormat());
@@ -324,7 +324,7 @@ public class RecordingService extends Service {
 
             int offset = 0;
             while (offset < byteCount && recording) {
-                int inputIndex = audioEncoder.dequeueInputBuffer(10000);
+                int inputIndex = audioEncoder.dequeueInputBuffer(1000);
                 if (inputIndex < 0) continue;
 
                 ByteBuffer input = audioEncoder.getInputBuffer(inputIndex);
@@ -410,49 +410,58 @@ public class RecordingService extends Service {
     }
 
     private void stopRecording() {
-        if (!recording && projection == null && videoEncoder == null && audioEncoder == null) {
-            stopSelf();
-            return;
+        synchronized (this) {
+            if (stopping) return;
+            if (!recording && projection == null && videoEncoder == null && audioEncoder == null) {
+                stopSelf();
+                return;
+            }
+            stopping = true;
         }
 
         recording = false;
 
         if (playbackRecord != null) {
             try { playbackRecord.stop(); } catch (Exception ignored) {}
-            playbackRecord.release();
+            try { playbackRecord.release(); } catch (Exception ignored) {}
             playbackRecord = null;
         }
         if (microphoneRecord != null) {
             try { microphoneRecord.stop(); } catch (Exception ignored) {}
-            microphoneRecord.release();
+            try { microphoneRecord.release(); } catch (Exception ignored) {}
             microphoneRecord = null;
         }
 
         if (videoThread != null && videoThread != Thread.currentThread()) {
-            try { videoThread.join(1500); } catch (InterruptedException ignored) {}
-            videoThread = null;
+            try { videoThread.join(10000); } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
         }
         if (audioThread != null && audioThread != Thread.currentThread()) {
-            try { audioThread.join(1500); } catch (InterruptedException ignored) {}
-            audioThread = null;
+            try { audioThread.join(10000); } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
         }
+
+        videoThread = null;
+        audioThread = null;
 
         if (videoEncoder != null) {
             try { videoEncoder.stop(); } catch (Exception ignored) {}
-            videoEncoder.release();
+            try { videoEncoder.release(); } catch (Exception ignored) {}
             videoEncoder = null;
         }
         if (audioEncoder != null) {
             try { audioEncoder.stop(); } catch (Exception ignored) {}
-            audioEncoder.release();
+            try { audioEncoder.release(); } catch (Exception ignored) {}
             audioEncoder = null;
         }
         if (virtualDisplay != null) {
-            virtualDisplay.release();
+            try { virtualDisplay.release(); } catch (Exception ignored) {}
             virtualDisplay = null;
         }
         if (projection != null) {
-            projection.stop();
+            try { projection.stop(); } catch (Exception ignored) {}
             projection = null;
         }
 
@@ -461,7 +470,7 @@ public class RecordingService extends Service {
                 try {
                     if (muxerStarted) muxer.stop();
                 } catch (Exception ignored) {}
-                muxer.release();
+                try { muxer.release(); } catch (Exception ignored) {}
                 muxer = null;
             }
             muxerStarted = false;
@@ -482,8 +491,11 @@ public class RecordingService extends Service {
 
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
-    }
 
+        synchronized (this) {
+            stopping = false;
+        }
+    }
     @Override
     public void onDestroy() {
         stopRecording();
