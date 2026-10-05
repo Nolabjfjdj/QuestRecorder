@@ -54,6 +54,7 @@ public class RecordingService extends Service {
     private volatile boolean recording;
     private Thread videoThread;
     private Thread audioThread;
+    private boolean stopping;
 
     private int width = 1280;
     private int height = 720;
