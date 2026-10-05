@@ -37,7 +37,7 @@ public class MainActivity extends Activity {
         info.setText(
                 "Enregistre la capture choisie dans Android.\n\n" +
                 "Les vidéos sont enregistrées dans Movies/QuestRecorder.\n" +
-                "Le micro peut être enregistré avec la vidéo.\n\n" +
+                "L'audio interne et le micro sont enregistrés avec la vidéo.\n\n" +
                 "Choisis tes réglages avant de démarrer."
         );
         info.setTextSize(16);
